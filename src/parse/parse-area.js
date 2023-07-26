@@ -43,6 +43,10 @@ class ParseArea {
   static AreaShort = {};
 
   static init() {
+    ParseArea.ProvinceShortList = [];
+    ParseArea.ProvinceShort = {};
+    ParseArea.CityShort = {};
+    ParseArea.AreaShort = {};
     for (const code in AREA.province_list) {
       const province = AREA.province_list[code];
       ParseArea.ProvinceShort[code] = ProvinceKeys.reduce((v, key) => v.replace(key, ''), province);
@@ -67,6 +71,13 @@ class ParseArea {
       }
     }
     ParseArea.isInit = true;
+  }
+
+  static makeAREA (provinces) {
+    const newAREA = Utils.genArea(provinces)
+    Object.assign(AREA, newAREA)
+    ParseArea.init ( )
+    return newAREA
   }
 
   constructor(address) {
@@ -125,7 +136,10 @@ class ParseArea {
 
             if (result.area && _address.includes(result.area)) {
               result.__parse += 1;
-            } else if (result.area && _address.includes(result.area.substr(0, 2))) {
+              if (result.street && _address.includes(result.street)) {
+                result.__parse += 0.5;
+              }
+          } else if (result.area && _address.includes(result.area.substr(0, 2))) {
               result.__parse += 0.5;
             }
           }
@@ -159,6 +173,7 @@ class ParseArea {
       province: '',
       city: '',
       area: '',
+      street: '',
       details: '',
       name: '',
       code: '',
@@ -216,8 +231,10 @@ class ParseArea {
           }
           break;
         } else {
+          address = address.trim();
+          if (address === '市' || address === '区' || address === '县') address = ''
           //如果没有识别到地区 缓存本次结果，并重置数据
-          results.unshift({...result, details: address.trim()});
+          results.unshift({...result, details: address});
           result.province = '';
           result.code = '';
           result.name = '';
@@ -226,7 +243,9 @@ class ParseArea {
       }
     }
     if (result.code) {
-      results.unshift({...result, details: address.trim()});
+      address = address.trim();
+      if (address === '市' || address === '区' || address === '县') address = ''
+      results.unshift({...result, details: address});
     }
     return results;
   }
@@ -304,6 +323,7 @@ class ParseArea {
     const areaList = Utils.getTargetAreaListByCode('area', result.code);
     const _result = {
       area: '',
+      street: '',
       code: '',
       index: -1,
       address: '',
@@ -337,7 +357,13 @@ class ParseArea {
     if (_result.index > -1) {
       result.area = _result.area;
       result.code = _result.code;
-      address = _result.address;
+      address = ParseArea.parse_street_by_area(_result.address, result);
+    } else {
+      const city_code = result.code.slice ( 0, 4 ).concat ( '00' )
+      const area_code = result.code.slice ( 0, 6 )
+      const city_name = AREA.city_list [ city_code ]
+      const area_name = AREA.area_list [ area_code ]
+      if ( city_name === area_name ) return ParseArea.parse_area_by_city ( city_name + address, result )
     }
     return address;
   }
@@ -371,8 +397,44 @@ class ParseArea {
             }
           }
         }
+        address = ParseArea.parse_street_by_area(address, result);
         break;
       }
+    }
+    return address;
+  }
+
+  /**
+   * 1.3.,2.2 已匹配城市的地址 提取地区
+   * @param address string
+   * @param result object
+   * @returns {string}
+   */
+  static parse_street_by_area(address, result) {
+    const streetList = Utils.getTargetAreaListByCode('street', result.code);
+    const _result = {
+      street: '',
+      code: '',
+      index: -1,
+      address: '',
+      isShort: false
+    };
+    for (const street of streetList) {
+      let index = address.indexOf(street.name);
+
+      const streetLength = street.name.length;
+      if (index > -1 && (_result.index === -1 || _result.index > index)) {
+        _result.street = street.name;
+        _result.code = street.code;
+        _result.index = index;
+        _result.address = address.substr(index + streetLength);
+        _result.isShort = false;
+      }
+    }
+    if (_result.index > -1) {
+      result.street = _result.street;
+      result.code = _result.code;
+      address = _result.address;
     }
     return address;
   }
@@ -389,6 +451,7 @@ class ParseArea {
       province: '',
       city: '',
       area: '',
+      street: '',
       details: '',
       name: '',
       code: '',
@@ -432,11 +495,13 @@ class ParseArea {
         address = address.substr(index + cityLength);
         address = ParseArea.parse_area_by_city(address, result);
         if (_provinceName || result.area) {
-          result.__parse = true;
+          result.__parse = 1.7;
           break;
         } else {
+          address = address.trim();
+          if (address === '市' || address === '区' || address === '县') address = ''
           //如果没有识别到省份和地区 缓存本次结果，并重置数据
-          results.unshift({...result, details: address.trim()});
+          results.unshift({...result, details: address});
           result.name = '';
           result.city = '';
           result.province = '';
@@ -446,7 +511,9 @@ class ParseArea {
       }
     }
     if (result.code) {
-      results.unshift({...result, details: address.trim()});
+      address = address.trim();
+      if (address === '市' || address === '区' || address === '县') address = ''
+      results.unshift({...result, details: address});
     }
     return results;
   }
@@ -462,6 +529,7 @@ class ParseArea {
       province: '',
       city: '',
       area: '',
+      street: '',
       details: '',
       name: '',
       code: '',
@@ -530,14 +598,16 @@ class ParseArea {
           }
         }
         if (shortArea && address.charAt(index + areaLength) === '县') index += 1;
-        address = address.substr(index + areaLength);
+        address = ParseArea.parse_street_by_area(address, result);
 
         if (_provinceName || _cityName) {
-          result.__parse = true;
+          result.__parse = 1.5;
           break;
         } else {
+          address = address.trim();
+          if (address === '市' || address === '区' || address === '县') address = ''
           //如果没有识别到省份和地区 缓存本次结果，并重置数据
-          results.unshift({...result, details: address.trim()});
+          results.unshift({...result, details: address});
           result.name = '';
           result.city = '';
           result.area = '';
@@ -548,7 +618,9 @@ class ParseArea {
       }
     }
     if (result.code) {
-      results.unshift({...result, details: address.trim()});
+      address = address.trim();
+      if (address === '市' || address === '区' || address === '县') address = ''
+      results.unshift({...result, details: address});
     }
     return results;
   }

@@ -31,6 +31,14 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { de
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 var ParseAddress = function () {
+  _createClass(ParseAddress, [{
+    key: 'makeAREA',
+    value: function makeAREA(provinces) {
+
+      return _parseArea2.default.makeAREA(provinces);
+    }
+  }]);
+
   function ParseAddress(address) {
     _classCallCheck(this, ParseAddress);
 

@@ -22,17 +22,45 @@ function getAreaByCode(code) {
 }
 
 /**
- * 通过code取父省市对象
- * @param target province/city/area
+ * 通过地区编码返回省市区街道对象
  * @param code
- * @returns {Array} [province, city, area]
+ * @returns {{code: *, province: (*|string), city: (*|string), area: (*|string), street: (*|string)}}
+ */
+function getStreetByCode(code) {
+  const pCode = `${code.slice(0, 2)}0000`,
+    cCode = `${code.slice(0, 4)}00`,
+    aCode = code.slice(0, 6);
+  return {
+    code: code,
+    province: AREA.province_list[pCode] || '',
+    city: AREA.city_list[cCode] || '',
+    area: AREA.area_list[aCode] || '',
+    street: AREA.street_list[code] || '',
+  };
+}
+
+/**
+ * 通过code取父省市对象
+ * @param target province/city/area/street
+ * @param code
+ * @returns {Array} [province, city, area,street]
  */
 function getTargetParentAreaListByCode(target, code) {
   const result = [];
-  result.unshift({
-    code,
-    name: AREA.area_list[code] || '',
-  });
+  if (target === 'street') {
+    result.unshift({
+      code,
+      name: AREA.street_list[code] || '',
+    });
+  }
+
+  if (['area', 'city', 'province'].includes(target)) {
+    code = code.slice(0, 6);
+    result.unshift({
+      code,
+      name: AREA.area_list[code] || '',
+    });
+  }
   if (['city', 'province'].includes(target)) {
     code = code.slice(0, 4) + '00';
     result.unshift({
@@ -52,7 +80,7 @@ function getTargetParentAreaListByCode(target, code) {
 
 /**
  * 根据省市县类型和对应的`code`获取对应列表
- * 只能逐级获取 province->city->area OK  province->area ERROR
+ * 只能逐级获取 province->city->area->street OK  province->area->street ERROR
  * @param target String province city area
  * @param code
  * @param parent 默认获取子列表 如果要获取的是父对象 传true
@@ -64,12 +92,25 @@ function getTargetAreaListByCode(target, code, parent) {
   let list = AREA[{
     city: 'city_list',
     area: 'area_list',
+    street: 'street_list',
   }[target]];
   if (code && list) {
     code = code.toString();
     let provinceCode = code.slice(0, 2);
     let cityCode = code.slice(2, 4);
-    if (target === 'area' && cityCode !== '00') {
+    let areaCode = code.slice(4, 6);
+    if (target === 'street') {
+      code = `${provinceCode}${cityCode}${areaCode}`;
+      for (let j = 0; j < 1000; j++) {
+        let _code = `${code}${j < 10 ? '00' : j < 100 ? '0' : ''}${j}`;
+        if (list[_code]) {
+          result.push({
+            code: _code,
+            name: list[_code],
+          });
+        }
+      }
+    } else if (target === 'area' && cityCode !== '00') {
       code = `${provinceCode}${cityCode}`;
       for (let j = 0; j < 100; j++) {
         let _code = `${code}${j < 10 ? '0' : ''}${j}`;
@@ -81,7 +122,7 @@ function getTargetAreaListByCode(target, code, parent) {
         }
       }
     } else {
-      for (let i = 0; i < 91; i++) {  //最大city编码只到91
+      for (let i = 0; i < 99; i++) {  //最大city编码只到91
         //只有city跟area
         code = `${provinceCode}${i < 10 ? '0' : ''}${i}${target === 'city' ? '00' : ''}`;
         if (target === 'city') {
@@ -121,15 +162,17 @@ function getTargetAreaListByCode(target, code, parent) {
  * @param province
  * @param city
  * @param area
- * @returns {{code: string, province: string, city: string, area: string}}
+ * @param street
+ * @returns {{code: string, province: string, city: string, area: string, street: string}}
  */
-function getAreaByAddress({province, city, area}) {
-  const {province_list, city_list, area_list} = AREA;
+function getAreaByAddress({province, city, area, street}) {
+  const {province_list, city_list, area_list, street_list} = AREA;
   const result = {
     code: '',
     province: '',
     city: '',
     area: '',
+    street: '',
   };
   for (let _code in province_list) {
     let _province = province_list[_code];
@@ -151,6 +194,18 @@ function getAreaByAddress({province, city, area}) {
                   if (_area.indexOf(area) === 0) {
                     result.code = _code_area;
                     result.area = _area;
+                    if (street) {
+                      for (let _code_street in street_list) {
+                        if (_code_street.indexOf(_code_area) === 0) {
+                          let _street = street_list[_code_street];
+                          if (_street.indexOf(street) === 0) {
+                            result.code = _code_street;
+                            result.street = _street;
+                            break;
+                          }
+                        }
+                      }
+                    }
                     break;
                   }
                 }
@@ -203,6 +258,38 @@ function shortIndexOf(address, shortName, name) {
   return {index, matchName};
 }
 
+function genArea(provinces) {
+
+  const area = {
+      province_list: {},
+      city_list: {},
+      area_list: {},
+      street_list: {},
+  }
+  
+  for ( const province_code in provinces ) {
+      const { n, s: cities } = provinces [ province_code ]
+      area.province_list [ province_code ] = n
+  
+      for ( const city_code in cities ) {
+          const { n, s: areas } = cities [ city_code ]
+          area.city_list [ city_code ] = n
+  
+          for ( const area_code in areas ) {
+              const { n, s: streets } = areas [ area_code ]
+              area.area_list [ area_code ] = n
+  
+              for ( const street_code in streets ) {
+                  const { n } = streets [ street_code ]
+                  area.street_list [ street_code ] = n
+              }
+          }
+      }
+  }
+
+  return area
+}
+
 const Utils = {
   shortIndexOf,
   strLen,
@@ -210,6 +297,7 @@ const Utils = {
   getAreaByAddress,
   getTargetAreaListByCode,
   Reg,
+  genArea,
 };
 
 export default Utils;

@@ -39,6 +39,10 @@ var ParseArea = function () {
   _createClass(ParseArea, null, [{
     key: 'init',
     value: function init() {
+      ParseArea.ProvinceShortList = [];
+      ParseArea.ProvinceShort = {};
+      ParseArea.CityShort = {};
+      ParseArea.AreaShort = {};
       for (var code in _area2.default.province_list) {
         var province = _area2.default.province_list[code];
         ParseArea.ProvinceShort[code] = ProvinceKeys.reduce(function (v, key) {
@@ -67,6 +71,14 @@ var ParseArea = function () {
         }
       }
       ParseArea.isInit = true;
+    }
+  }, {
+    key: 'makeAREA',
+    value: function makeAREA(provinces) {
+      var newAREA = _utils2.default.genArea(provinces);
+      Object.assign(_area2.default, newAREA);
+      ParseArea.init();
+      return newAREA;
     }
   }]);
 
@@ -145,6 +157,9 @@ var ParseArea = function () {
 
                 if (result.area && _address.includes(result.area)) {
                   result.__parse += 1;
+                  if (result.street && _address.includes(result.street)) {
+                    result.__parse += 0.5;
+                  }
                 } else if (result.area && _address.includes(result.area.substr(0, 2))) {
                   result.__parse += 0.5;
                 }
@@ -188,6 +203,7 @@ var ParseArea = function () {
         province: '',
         city: '',
         area: '',
+        street: '',
         details: '',
         name: '',
         code: '',
@@ -271,8 +287,10 @@ var ParseArea = function () {
             }
             break;
           } else {
+            address = address.trim();
+            if (address === '市' || address === '区' || address === '县') address = '';
             //如果没有识别到地区 缓存本次结果，并重置数据
-            results.unshift(_extends({}, result, { details: address.trim() }));
+            results.unshift(_extends({}, result, { details: address }));
             result.province = '';
             result.code = '';
             result.name = '';
@@ -281,7 +299,9 @@ var ParseArea = function () {
         }
       }
       if (result.code) {
-        results.unshift(_extends({}, result, { details: address.trim() }));
+        address = address.trim();
+        if (address === '市' || address === '区' || address === '县') address = '';
+        results.unshift(_extends({}, result, { details: address }));
       }
       return results;
     }
@@ -433,6 +453,7 @@ var ParseArea = function () {
       var areaList = _utils2.default.getTargetAreaListByCode('area', result.code);
       var _result = {
         area: '',
+        street: '',
         code: '',
         index: -1,
         address: '',
@@ -512,7 +533,13 @@ var ParseArea = function () {
       if (_result.index > -1) {
         result.area = _result.area;
         result.code = _result.code;
-        address = _result.address;
+        address = ParseArea.parse_street_by_area(_result.address, result);
+      } else {
+        var city_code = result.code.slice(0, 4).concat('00');
+        var area_code = result.code.slice(0, 6);
+        var city_name = _area2.default.city_list[city_code];
+        var area_name = _area2.default.area_list[area_code];
+        if (city_name === area_name) return ParseArea.parse_area_by_city(city_name + address, result);
       }
       return address;
     }
@@ -583,6 +610,7 @@ var ParseArea = function () {
                 }
               }
             }
+            address = ParseArea.parse_street_by_area(address, result);
             break;
           }
         }
@@ -605,6 +633,66 @@ var ParseArea = function () {
     }
 
     /**
+     * 1.3.,2.2 已匹配城市的地址 提取地区
+     * @param address string
+     * @param result object
+     * @returns {string}
+     */
+
+  }, {
+    key: 'parse_street_by_area',
+    value: function parse_street_by_area(address, result) {
+      var streetList = _utils2.default.getTargetAreaListByCode('street', result.code);
+      var _result = {
+        street: '',
+        code: '',
+        index: -1,
+        address: '',
+        isShort: false
+      };
+      var _iteratorNormalCompletion10 = true;
+      var _didIteratorError10 = false;
+      var _iteratorError10 = undefined;
+
+      try {
+        for (var _iterator10 = streetList[Symbol.iterator](), _step10; !(_iteratorNormalCompletion10 = (_step10 = _iterator10.next()).done); _iteratorNormalCompletion10 = true) {
+          var street = _step10.value;
+
+          var index = address.indexOf(street.name);
+
+          var streetLength = street.name.length;
+          if (index > -1 && (_result.index === -1 || _result.index > index)) {
+            _result.street = street.name;
+            _result.code = street.code;
+            _result.index = index;
+            _result.address = address.substr(index + streetLength);
+            _result.isShort = false;
+          }
+        }
+      } catch (err) {
+        _didIteratorError10 = true;
+        _iteratorError10 = err;
+      } finally {
+        try {
+          if (!_iteratorNormalCompletion10 && _iterator10.return) {
+            _iterator10.return();
+          }
+        } finally {
+          if (_didIteratorError10) {
+            throw _iteratorError10;
+          }
+        }
+      }
+
+      if (_result.index > -1) {
+        result.street = _result.street;
+        result.code = _result.code;
+        address = _result.address;
+      }
+      return address;
+    }
+
+    /**
      * 2.1 通过城市识别地址
      * @param addressBase string
      * @returns {Array}
@@ -619,6 +707,7 @@ var ParseArea = function () {
         province: '',
         city: '',
         area: '',
+        street: '',
         details: '',
         name: '',
         code: '',
@@ -665,11 +754,13 @@ var ParseArea = function () {
           address = address.substr(index + cityLength);
           address = ParseArea.parse_area_by_city(address, result);
           if (_provinceName || result.area) {
-            result.__parse = true;
+            result.__parse = 1.7;
             break;
           } else {
+            address = address.trim();
+            if (address === '市' || address === '区' || address === '县') address = '';
             //如果没有识别到省份和地区 缓存本次结果，并重置数据
-            results.unshift(_extends({}, result, { details: address.trim() }));
+            results.unshift(_extends({}, result, { details: address }));
             result.name = '';
             result.city = '';
             result.province = '';
@@ -679,7 +770,9 @@ var ParseArea = function () {
         }
       }
       if (result.code) {
-        results.unshift(_extends({}, result, { details: address.trim() }));
+        address = address.trim();
+        if (address === '市' || address === '区' || address === '县') address = '';
+        results.unshift(_extends({}, result, { details: address }));
       }
       return results;
     }
@@ -698,6 +791,7 @@ var ParseArea = function () {
         province: '',
         city: '',
         area: '',
+        street: '',
         details: '',
         name: '',
         code: '',
@@ -777,14 +871,16 @@ var ParseArea = function () {
             }
           }
           if (shortArea && address.charAt(index + areaLength) === '县') index += 1;
-          address = address.substr(index + areaLength);
+          address = ParseArea.parse_street_by_area(address, result);
 
           if (_provinceName || _cityName) {
-            result.__parse = true;
+            result.__parse = 1.5;
             break;
           } else {
+            address = address.trim();
+            if (address === '市' || address === '区' || address === '县') address = '';
             //如果没有识别到省份和地区 缓存本次结果，并重置数据
-            results.unshift(_extends({}, result, { details: address.trim() }));
+            results.unshift(_extends({}, result, { details: address }));
             result.name = '';
             result.city = '';
             result.area = '';
@@ -795,7 +891,9 @@ var ParseArea = function () {
         }
       }
       if (result.code) {
-        results.unshift(_extends({}, result, { details: address.trim() }));
+        address = address.trim();
+        if (address === '市' || address === '区' || address === '县') address = '';
+        results.unshift(_extends({}, result, { details: address }));
       }
       return results;
     }

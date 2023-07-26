@@ -16,6 +16,11 @@ class ParseAddress {
   static Reg = {
     ...Utils.Reg
   };
+  
+  makeAREA(provinces) {
+
+    return ParseArea.makeAREA ( provinces )
+  }
 
   constructor(address) {
     if (address) {
